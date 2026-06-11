@@ -1,0 +1,47 @@
+name: build
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # windows-latest already ships VS2022, Rust (rustup) and Inno Setup 6.
+      - name: Build DLL and installer
+        shell: pwsh
+        run: .\deployment\Build.ps1 -Verbose -Architecture x64
+
+      - name: Render every test sample through the DLL
+        shell: pwsh
+        run: |
+          $harness = "var\build\x64\Release\ThumbnailTestHarness.exe"
+          $dll = "var\build\x64\Release\SvgPreview.dll"
+          New-Item -ItemType Directory -Force var\thumbs | Out-Null
+          $failed = 0
+          Get-ChildItem test -Recurse -Include *.svg,*.svgz -File | ForEach-Object {
+            & $harness $dll $_.FullName "var\thumbs\$($_.BaseName)$($_.Extension.Replace('.','_')).png" 256
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::thumbnail failed for $($_.FullName)"
+              $failed++
+            }
+          }
+          if ($failed -gt 0) { exit 1 }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: svg_preview_x64
+          path: var/installer/svg_preview_x64.exe
+
+      - name: Upload rendered thumbnails
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-thumbnails
+          path: var/thumbs/*.png
