@@ -53,27 +53,52 @@ Development install exe's are created from every commit through the continual-in
 
 Being dev releases, they might not work. Current status: [![Build status Appveyor](https://ci.appveyor.com/api/projects/status/github/tibold/svg-explorer-extension?svg=true)](https://ci.appveyor.com/project/tibold/svg-explorer-extension)  
 
-## Developer Build Environment c.2019
-Warning: it's about 10 GB. 
+## Rendering engine
 
-- QtCreator
-- Qt SDK - _MSVC 2017 64-bit_ using Qt Maintenance Tool installed with QtCreator. Might be problems if install MSVC 32 bit at same time. (Qt Creator & SDK: 7.2 GB)
-- MS Visual Studio - build tools only else many more GB. Reboots necessary, [read the notes](https://chocolatey.org/packages/visualstudio2017buildtools) (2.5 GB)
-- Windows SDK
-- Inno Setup v6
+Since 2026 the extension renders SVGs with [resvg](https://github.com/linebender/resvg)
+(statically linked), replacing the previous QtSvg engine. resvg implements a far more
+complete SVG subset: `clipPath`, masks, filters, `<use>` references, embedded raster
+images and gzip compressed `.svgz` all render correctly, fixing long-standing issues
+such as #118, #119, #123 and #125.
+
+## Developer Build Environment
+
+- MS Visual Studio 2022 (Community or Build Tools) with the *C++ desktop* workload
+  and the *C++ CMake tools* component
+- [Rust](https://rustup.rs/) (stable, MSVC toolchain) - used to build resvg
+- Inno Setup v6 (only needed to build the installer)
+- Git
+
+[winget](https://learn.microsoft.com/windows/package-manager/winget/) installation:
+
+    winget install Microsoft.VisualStudio.2022.BuildTools
+    winget install Rustlang.Rustup
+    winget install JRSoftware.InnoSetup
+    winget install Git.Git
 
 [Chocolatey](https://chocolatey.org/) installation:
 
-    choco install qtcreator, windows-sdk-10.-0, innosetup
-    choco install visualstudio2017buildtools
-    choco install visualstudio2017-workload-vctools ^
-      --params "--add Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre"
+    choco install visualstudio2022buildtools
+    choco install visualstudio2022-workload-vctools
+    choco install rustup.install innosetup git
+
+With either package manager, make sure the Visual Studio install includes the
+*Desktop development with C++* workload and the *C++ CMake tools* component
+(add them from the Visual Studio Installer if needed).
 
 **Quick start** after developer env is set:
 
     git clone https://github.com/tibold/svg-explorer-extension.git
-    cd svg-explorer-extension\deployment
-    .\build.cmd
+    cd svg-explorer-extension
+    pwsh .\deployment\Build.ps1 -Verbose -Architecture x64
+
+The build script clones and compiles resvg at a pinned release, builds the
+DLL with CMake and packages the installer.
+
+To validate thumbnails without registering the extension, build also produces
+`ThumbnailTestHarness.exe`, which drives the DLL exactly like Explorer does:
+
+    ThumbnailTestHarness.exe SvgSee.dll input.svg output.png 256
 
 ## History
 Tibold Kandrai started the project in 2012, first on Google Code, Codeplex. Life happened and Tibold didn't have time to work on it any more, though the extension continued to work more than it didn't so people kept using it. 
@@ -88,6 +113,7 @@ On 1st of January, 2020 version v1.0.0 was released including all bug fixes and 
 
 Thank you's for helping make this a better project _([emoji key](https://allcontributors.org/docs/en/emoji-key))_:
 
+* [resvg](https://github.com/linebender/resvg) - SVG rendering engine
 * [Qt](https://www.qt.io/) - dev platform and libraries
 * [Jeremy@urk](https://www.codemonkeycodes.com/2010/01/11/ithumbnailprovider-re-visited/) - initial example
 * [Tibold Kandrai](https://github.com/tibold) - Project creator and primary developer
