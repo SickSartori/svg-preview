@@ -1,0 +1,12 @@
+<svg width="100%" height="100%" viewBox="0 0 200 200" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <!-- Pattern that QtSvg fails to render correctly (issues #118, #123, #125):
+       width/height in percentages, clipPath applied to a <use> that references
+       an embedded base64 <image> defined later in <defs>. -->
+  <g id="logo">
+    <clipPath id="clip1"><circle cx="100" cy="100" r="80"/></clipPath>
+    <g clip-path="url(#clip1)"><use xlink:href="#img1" x="0" y="0" width="200" height="200"/></g>
+  </g>
+  <defs>
+    <image id="img1" width="200" height="200" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAI0lEQVQ4jWNk2MLwn4OBgYFczMLAIMhACRg1YNSAUQMGiwEAP3QDaHty60MAAAAASUVORK5CYII="/>
+  </defs>
+</svg>
