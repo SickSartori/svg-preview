@@ -31,8 +31,7 @@ STDAPI CreateRegistryKey(REGKEY_SUBKEY_AND_VALUE* pKey)
 
     if (SUCCEEDED(hr))
     {
-        QString keyName = QString::fromWCharArray(pKey->lpszSubKey);
-        debugLog << "Setting key: " << keyName;
+        debugLog << "Setting key: " << pKey->lpszSubKey;
         LSTATUS status = SHSetValue(pKey->hKey, pKey->lpszSubKey, pKey->lpszValue, pKey->dwType, pvData, (DWORD)cbData);
         if (NOERROR != status)
         {
@@ -71,8 +70,7 @@ STDAPI DeleteRegistryKeys(REGKEY_SUBKEY* aKeys, ULONG cKeys)
 
     for (ULONG iKey = 0; iKey < cKeys; iKey++)
     {
-        QString keyName = QString::fromWCharArray(aKeys[iKey].lpszSubKey);
-        debugLog << "Deleting key: " << keyName;
+        debugLog << "Deleting key: " << aKeys[iKey].lpszSubKey;
         status = RegDeleteTree(aKeys[iKey].hKey, aKeys[iKey].lpszSubKey);
         if (NOERROR != status)
         {

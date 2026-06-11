@@ -1,4 +1,4 @@
-LIBRARY	"SVGThumbnailExtension"
+LIBRARY	"SvgSee"
 
 EXPORTS
 	DllRegisterServer	PRIVATE

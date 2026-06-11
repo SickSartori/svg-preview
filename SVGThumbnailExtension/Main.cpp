@@ -2,53 +2,26 @@
 #include "Logging.h"
 #include "Registry.h"
 
-#include <QtCore/QString>
-#include <QtCore/QDebug>
-#include <QtCore/QDir>
-#include <QtCore/QFileInfo>
-
 HINSTANCE g_hinstDll = NULL;
 LONG g_cRef = 0;
-
-QApplication * app;
-
-#if QT_VERSION >= 0x050200
-Q_LOGGING_CATEGORY(svgExtension, "SvgSee")
-#endif
-
-void Initialize(HMODULE module) {
-    int c = 0;
-    WCHAR path[2048];
-    ZeroMemory(path, sizeof(path));
-    auto length = GetModuleFileNameW(module, path, 2048);
-    if (GetLastError() != ERROR_SUCCESS || length <= 0) {
-        debugLog << "Failed to retrieve module name";
-    }
-    auto modulePath = QString::fromWCharArray(path, length);
-    debugLog << "Module path is: " << modulePath;
-    QFileInfo dll(modulePath);
-    QDir libraryPath = dll.dir();
-    QStringList libraryPaths = (QStringList() << libraryPath.absolutePath());
-    QApplication::setLibraryPaths(libraryPaths);
-    app = new QApplication(c, (char **)0, 0);
-}
-
 
 BOOL APIENTRY DllMain(HINSTANCE hinstDll,
                       DWORD dwReason,
                       LPVOID pvReserved)
 {
-    Q_UNUSED(pvReserved)
+    UNREFERENCED_PARAMETER(pvReserved);
     switch (dwReason)
     {
     case DLL_PROCESS_ATTACH:
         debugLog << "DLL_PROCESS_ATTACH";
         g_hinstDll = hinstDll;
-        Initialize(hinstDll);
+        // No per-thread initialization is needed.
+        DisableThreadLibraryCalls(hinstDll);
         break;
     }
     return TRUE;
 }
+
 STDAPI_(HINSTANCE) DllInstance()
 {
     return g_hinstDll;
@@ -99,11 +72,11 @@ STDAPI DllRegisterServer()
 
 STDAPI DllUnregisterServer()
 {
-    debugLog << "Enter: DLLRegisterServer";
+    debugLog << "Enter: DLLUnregisterServer";
 
     REGKEY_SUBKEY keys[] = {{HKEY_CLASSES_ROOT, L"CLSID\\" szCLSID_SampleThumbnailProvider}};
     auto result = DeleteRegistryKeys(keys, ARRAYSIZE(keys));
 
-    debugLog << "Leaving: DLLRegisterServer";
+    debugLog << "Leaving: DLLUnregisterServer";
     return result;
 }
