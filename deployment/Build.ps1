@@ -1,7 +1,7 @@
 [CmdletBinding()]
 Param(
     [Parameter()]
-    [string] $ProjectName = 'SVGThumbnailExtension',
+    [string] $ProjectName = 'SvgPreview',
 
     [Parameter()]
     [ValidateSet('release', 'debug')]
@@ -11,150 +11,181 @@ Param(
     [ValidateSet('x86', 'x64')]
     [string] $Architecture = 'x64',
 
+    # Tag of the resvg release used as the rendering engine.
     [Parameter()]
-    [ValidateSet('2015', '2017', '2019')]
-    [string] $VSVersion = '2017',
+    [string] $ResvgVersion = 'v0.47.0',
 
     [Parameter()]
-    [ValidateSet('Community', 'Professional', 'Enterprise', 'BuildTools')]
-    [string] $VSEdition = 'Community',
+    [string] $ResvgRepository = 'https://github.com/linebender/resvg.git',
 
-    [Parameter()]
-    [string] $WinSdk = '10.0.17763.0',
-    
-    [Parameter()]
-    [string] $QtVersion,
-    
-    [Parameter()]
-    [string] $QtInstallPath = 'C:\Qt\',
-
-    # Parameter help description
     [Parameter()]
     [switch] $BuildInstaller = [switch]::Present,
-    
-    # Parameter help description
+
     [Parameter()]
     [switch] $SignInstaller,
-    
+
     [Parameter()]
     [string] $InnoSetupPath = 'C:\Program Files (x86)\Inno Setup 6'
 )
 
 $ErrorActionPreference = 'stop'
 
-if(-not $QtVersion){
-    switch ($VSVersion) {
-        '2019' { $QtVersion = '5.15.*' }
-        Default { $QtVersion = '5.12.*'}
-    }
-}
+Import-Module (Join-Path $PSScriptRoot 'Modules/Utils.psd1')
 
-Import-Module (Join-Path $PSScriptRoot 'Modules/Qt.psd1')
-Import-Module (Join-Path $PSScriptRoot 'Modules/VisualStudio.psd1')
-
-Write-Verbose "Setting up development environment."
-
-$rootFolder = Resolve-Path (Join-Path  $PSScriptRoot '..')
+$rootFolder = Resolve-Path (Join-Path $PSScriptRoot '..')
 
 $distDir = Join-Path $rootFolder "var/dist/$Architecture/$Configuration"
-$binary = Join-Path $distDir "SvgSee.dll"
 $buildDir = Join-Path $rootFolder "var/build/$Architecture"
-$projectFile = Resolve-Path (Join-Path $rootFolder "$ProjectName/$ProjectName.pro")
+$resvgSrcDir = Join-Path $rootFolder 'var/resvg'
+$resvgVendorDir = Join-Path $rootFolder 'SVGThumbnailExtension/thirdparty/resvg'
 $licenseDir = Join-Path $rootFolder 'var/licenses'
 $installerDir = Join-Path $rootFolder 'var/installer'
 $installerPath = Join-Path $installerDir "svg_see_$Architecture.exe"
 
+$cmakeArchMap = @{
+    'x86' = 'Win32';
+    'x64' = 'x64';
+}
+$rustTargetMap = @{
+    'x86' = 'i686-pc-windows-msvc';
+    'x64' = 'x86_64-pc-windows-msvc';
+}
+$cmakeConfigMap = @{
+    'release' = 'Release';
+    'debug' = 'Debug';
+}
+
+function Find-CMake {
+    $cmake = Get-Command cmake -ErrorAction SilentlyContinue
+    if ($cmake) {
+        return $cmake.Source
+    }
+
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path $vswhere)) {
+        throw 'cmake was not found on PATH and Visual Studio could not be located (vswhere missing).'
+    }
+
+    $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if (-not $vsPath) {
+        throw 'No Visual Studio installation with C++ tools was found.'
+    }
+
+    $bundled = Join-Path $vsPath 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe'
+    if (-not (Test-Path $bundled)) {
+        throw "Visual Studio found at '$vsPath' but it does not include CMake. Install the 'C++ CMake tools' component."
+    }
+
+    return $bundled
+}
+
 function Initialize-Environment {
 
-    $vsArchitectureMap = @{
-        'x86' = 'x86';
-        'x64' = 'amd64';
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        $cargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
+        if (Test-Path (Join-Path $cargoBin 'cargo.exe')) {
+            $env:Path = "$cargoBin;$env:Path"
+        }
+        else {
+            throw 'cargo (Rust) is required to build the resvg rendering engine. Install it from https://rustup.rs/.'
+        }
     }
 
-    Use-VisualStudio `
-        -Version $VSVersion `
-        -Edition $VSEdition `
-        -Architecture $vsArchitectureMap[$Architecture] `
-        -Sdk $WinSdk `
-        -Spectre `
-        -Verbose
-
-    # NOTE: I know it's not right. We'll fix it later.
-    $qtArchitectureMap = @{
-        'x86' = "msvc$VSVersion";
-        'x64' = "msvc${VSVersion}_64";
-    }
-
-    $qtParams = @{ }
-    if ($QtInstallPath) {
-        $qtParams["QtInstallPath"] = $QtInstallPath
-    }
-
-    Use-QtSdk `
-        -Version $QtVersion `
-        -Platform $qtArchitectureMap[$Architecture] `
-        @qtParams `
-        -Verbose
+    $script:cmake = Find-CMake
+    Write-Verbose "Using CMake at: $script:cmake"
 
     if ($BuildInstaller) {
         # Setup "Inno Setup" build environment
         Use-InnoSetup -InstallPath $InnoSetupPath
 
-        if($SignInstaller) {
+        if ($SignInstaller) {
             Use-OpenGPG
         }
     }
 }
 
-function Build-Application {
+function Build-Resvg {
 
-    Write-Verbose "Building application."
+    Write-Verbose "Building resvg $ResvgVersion for $Architecture."
 
-    New-Item -Path $distDir -ItemType Directory -Force
-    New-Item -Path $buildDir -ItemType Directory -Force
+    if (-not (Test-Path (Join-Path $resvgSrcDir '.git'))) {
+        git clone --depth 1 --branch $ResvgVersion $ResvgRepository $resvgSrcDir
+        Assert-LastExitCode 'Failed to clone resvg'
+    }
+    else {
+        git -C $resvgSrcDir fetch --depth 1 origin tag $ResvgVersion
+        Assert-LastExitCode 'Failed to fetch resvg'
+        git -C $resvgSrcDir checkout $ResvgVersion
+        Assert-LastExitCode 'Failed to checkout resvg version'
+    }
 
-    Push-Location $buildDir
+    $rustTarget = $rustTargetMap[$Architecture]
 
+    rustup target add $rustTarget
+    Assert-LastExitCode 'Failed to add rust target'
+
+    Push-Location (Join-Path $resvgSrcDir 'crates/c-api')
     try {
-        Invoke-QMake -ProjectFile:$projectFile -Configuration:$Configuration -DllDestDir:$distDir
-        Invoke-NMake -Command 'clean' -Operation 'clean project'
-        Invoke-NMake -Operation 'build project'
+        cargo build --release --target $rustTarget
+        Assert-LastExitCode 'Failed to build resvg'
     }
     finally {
         Pop-Location
     }
+
+    # Vendor the build products where CMake expects them.
+    $libDir = Join-Path $resvgVendorDir "lib/$Architecture"
+    New-Item -Path $libDir -ItemType Directory -Force | Out-Null
+    New-Item -Path (Join-Path $resvgVendorDir 'include') -ItemType Directory -Force | Out-Null
+
+    Copy-Item (Join-Path $resvgSrcDir "target/$rustTarget/release/resvg.lib") (Join-Path $libDir 'resvg.lib') -Force
+    Copy-Item (Join-Path $resvgSrcDir 'crates/c-api/resvg.h') (Join-Path $resvgVendorDir 'include/resvg.h') -Force
+}
+
+function Build-Application {
+
+    Write-Verbose 'Building application.'
+
+    New-Item -Path $distDir -ItemType Directory -Force | Out-Null
+    New-Item -Path $buildDir -ItemType Directory -Force | Out-Null
+
+    $cmakeConfig = $cmakeConfigMap[$Configuration]
+
+    & $script:cmake -S $rootFolder -B $buildDir -G 'Visual Studio 17 2022' -A $cmakeArchMap[$Architecture]
+    Assert-LastExitCode 'Failed to configure the project'
+
+    & $script:cmake --build $buildDir --config $cmakeConfig
+    Assert-LastExitCode 'Failed to build the project'
+
+    Copy-Item (Join-Path $buildDir "$cmakeConfig/SvgPreview.dll") $distDir -Force
 }
 
 function Publish-Application {
 
-    Write-Verbose "Deploying Qt dependencies for the application."
+    Write-Verbose 'Downloading the Visual C++ runtime redistributable.'
 
-    Invoke-QtWinDeploy -Binary:$binary -Disable translations, quick-import, system-d3d-compiler, angle, opengl-sw
-
-    Write-Verbose "Cleaning up unused Qt plugins."
-    $unusedPlugins = @(
-        'iconengines',
-        'imageformats'
-    )
-    foreach ($plugin in $unusedPlugins) {
-        Remove-Item (Join-Path $distDir $plugin) -Recurse -Force
+    # The installer runs vc_redist before registering the DLL (issue #75).
+    $vcRedist = Join-Path $distDir "vc_redist.$Architecture.exe"
+    if (-not (Test-Path $vcRedist)) {
+        Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.$Architecture.exe" -OutFile $vcRedist
     }
 
-    Write-Verbose "Gathering licenses"
+    Write-Verbose 'Gathering licenses'
 
-    New-Item -Path $licenseDir -ItemType Directory -Force
-    Copy-Item -Path (Join-Path $QtInstallPath 'Licenses\LICENSE') -Destination (Join-Path $licenseDir "Qt.txt") -Force
+    New-Item -Path $licenseDir -ItemType Directory -Force | Out-Null
+    Copy-Item -Path (Join-Path $resvgSrcDir 'LICENSE-MIT') -Destination (Join-Path $licenseDir 'resvg-MIT.txt') -Force
+    Copy-Item -Path (Join-Path $resvgSrcDir 'LICENSE-APACHE') -Destination (Join-Path $licenseDir 'resvg-APACHE.txt') -Force
 }
 
 function Build-Installer {
 
-    Write-Verbose "Building installer"
+    Write-Verbose 'Building installer'
 
     Push-Location $rootFolder
     try {
-        $issFile = Join-Path $rootFolder "deployment/${ProjectName}.iss";
+        $issFile = Join-Path $rootFolder "deployment/${ProjectName}.iss"
         iscc "/darch=$Architecture" "$issFile" | Write-Verbose
-        Assert-LastExitCode "Failed to build installer"
+        Assert-LastExitCode 'Failed to build installer'
     }
     finally {
         Pop-Location
@@ -163,25 +194,26 @@ function Build-Installer {
 
 function Protect-Installer {
 
-    Write-Verbose "Signing installer"
+    Write-Verbose 'Signing installer'
 
     # Sign the installer
     gpg --detach-sign --armor --yes -o "$installerPath.sig" "$installerPath" | Write-Verbose
-    Assert-LastExitCode "Failed to sign installer."
+    Assert-LastExitCode 'Failed to sign installer.'
 
     # Verify the signature
     gpg --verify "$installerPath.sig" "$installerPath" | Write-Verbose
-    Assert-LastExitCode "Failed to verify signed installer."
+    Assert-LastExitCode 'Failed to verify signed installer.'
 
-    Write-Verbose "Installer signed successfully"
+    Write-Verbose 'Installer signed successfully'
 }
 
 Initialize-Environment
+Build-Resvg
 Build-Application
 Publish-Application
 if ($BuildInstaller) {
     Build-Installer
-    if($SignInstaller) {
+    if ($SignInstaller) {
         Protect-Installer
     }
 }

@@ -1,14 +1,6 @@
 #ifndef SVGTHUMBNAILEXTENSION_GLOBAL_H
 #define SVGTHUMBNAILEXTENSION_GLOBAL_H
 
-#include <QtCore/qglobal.h>
-
-#if defined(SVGTHUMBNAILEXTENSION_LIBRARY)
-#  define SVGTHUMBNAILEXTENSIONSHARED_EXPORT Q_DECL_EXPORT
-#else
-#  define SVGTHUMBNAILEXTENSIONSHARED_EXPORT Q_DECL_IMPORT
-#endif
-
 #include <windows.h>
 #include <shlobj.h>
 #include <shlwapi.h>
@@ -19,20 +11,12 @@ STDAPI_(ULONG) DllAddRef();
 STDAPI_(ULONG) DllRelease();
 STDAPI_(HINSTANCE) DllInstance();
 
-// {68BF0019-79AB-4e7f-9500-AA3B5227DFE6}
-//#define szCLSID_SampleThumbnailProvider L"{68BF0019-79AB-4e7f-9500-AA3B5227DFE6}"
-//DEFINE_GUID(CLSID_SampleThumbnailProvider, 0x68bf0019, 0x79ab, 0x4e7f, 0x95, 0x0, 0xaa, 0x3b, 0x52, 0x27, 0xdf, 0xe6);
-
-// {4CA20D9A-98AC-4DD6-9C16-7449F29AC08A}
-#define szCLSID_SampleThumbnailProvider L"{4CA20D9A-98AC-4DD6-9C16-7449F29AC08A}"
+// SVG Preview thumbnail provider.
+// This CLSID is distinct from the upstream SVG See one on purpose, so both
+// products can be installed without clobbering each other's registration.
+// {927C8F59-C5EA-488C-995E-A61AF402DF7D}
+#define szCLSID_SampleThumbnailProvider L"{927C8F59-C5EA-488C-995E-A61AF402DF7D}"
 DEFINE_GUID(CLSID_SampleThumbnailProvider,
-            0x4ca20d9a, 0x98ac, 0x4dd6, 0x9c, 0x16, 0x74, 0x49, 0xf2, 0x9a, 0xc0, 0x8a);
-
-#if QT_VERSION < 0x050200
-#include <Qt/QApplication.h>
-#else
-#include <QtWidgets/QApplication>
-#endif
-#include <QtSvg/QSvgRenderer>
+            0x927c8f59, 0xc5ea, 0x488c, 0x99, 0x5e, 0xa6, 0x1a, 0xf4, 0x02, 0xdf, 0x7d);
 
 #endif // SVGTHUMBNAILEXTENSION_GLOBAL_H

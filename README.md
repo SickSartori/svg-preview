@@ -1,11 +1,29 @@
-# SVG Viewer Extension for Windows Explorer
+# SVG Preview for Windows Explorer
 
-Extension module for Windows Explorer to render SVG thumbnails, so that you can have an overview of your SVG files.
+[![build](https://github.com/SickSartori/svg-preview/actions/workflows/build.yml/badge.svg)](https://github.com/SickSartori/svg-preview/actions/workflows/build.yml)
+
+SVG thumbnails in Windows Explorer, rendered with [resvg](https://github.com/linebender/resvg) for accurate, browser-grade results.
+
+Based on [SVG Explorer Extension (SVG See)](https://github.com/tibold/svg-explorer-extension) by [Tibold Kandrai](https://github.com/tibold) - all credit for the original extension goes to him and its contributors. This fork replaces the QtSvg rendering engine, which is the part that could not be fixed upstream.
+
+## Why this fork
+
+QtSvg, the engine used by SVG See, only implements the SVG Tiny profile: `clipPath`, masks and filters are ignored (verified up to Qt 6.11). Any SVG using them - including most exports from Illustrator, Affinity or Inkscape - renders wrong or not at all. That is the root cause of upstream issues [#118](https://github.com/tibold/svg-explorer-extension/issues/118), [#119](https://github.com/tibold/svg-explorer-extension/issues/119), [#123](https://github.com/tibold/svg-explorer-extension/issues/123) and [#125](https://github.com/tibold/svg-explorer-extension/issues/125).
+
+This fork renders through resvg instead, statically linked into a single ~3 MB DLL (no Qt runtime to ship):
+
+| | QtSvg (SVG See) | resvg (SVG Preview) |
+|---|---|---|
+| clipPath + `<use>` + embedded image | ![QtSvg render](docs/comparison/clip-path-use-image-qtsvg.png) | ![resvg render](docs/comparison/clip-path-use-image-resvg.png) |
+
+The same clip path that QtSvg ignores (left, the image fills the whole square) is applied correctly by resvg (right). Masks, filters, `<use>` forward references, embedded raster images and gzipped `.svgz` all work too.
 
 ## Installation
-From _[Releases](https://github.com/tibold/svg-explorer-extension/releases)_ download and run appropriate binary for your system. There are no further actions required after installations.
+From _[Releases](https://github.com/SickSartori/svg-preview/releases)_ download and run appropriate binary for your system. There are no further actions required after installations.
 
 > Make sure you download the right architecture (the 32 bit installer will run on a 64 bit system, but the extension will not function).
+
+Installing SVG Preview automatically removes previous versions, including the original SVG See if present.
 
 ## Troubleshooting
 
@@ -46,34 +64,46 @@ If neither of the above helped please open an issue on our github page.
 Please open an issue on our github page, and include a screen shot and the exact error message.
 
 ### Automatic builds
-Development install exe's are created from every commit through the continual-integration system. 
+Development installers are created from every commit by [GitHub Actions](https://github.com/SickSartori/svg-preview/actions): open a green build and download the `svg_preview_x64` artifact. Every build also renders all the test SVGs through the freshly built DLL and uploads the resulting thumbnails, so rendering regressions are visible at a glance.
 
-- From https://ci.appveyor.com/project/tibold/svg-explorer-extension/history 
-- Select a recent build showing green, then click **Artifacts**.
+## Developer Build Environment
 
-Being dev releases, they might not work. Current status: [![Build status Appveyor](https://ci.appveyor.com/api/projects/status/github/tibold/svg-explorer-extension?svg=true)](https://ci.appveyor.com/project/tibold/svg-explorer-extension)  
+- MS Visual Studio 2022 (Community or Build Tools) with the *C++ desktop* workload
+  and the *C++ CMake tools* component
+- [Rust](https://rustup.rs/) (stable, MSVC toolchain) - used to build resvg
+- Inno Setup v6 (only needed to build the installer)
+- Git
 
-## Developer Build Environment c.2019
-Warning: it's about 10 GB. 
+[winget](https://learn.microsoft.com/windows/package-manager/winget/) installation:
 
-- QtCreator
-- Qt SDK - _MSVC 2017 64-bit_ using Qt Maintenance Tool installed with QtCreator. Might be problems if install MSVC 32 bit at same time. (Qt Creator & SDK: 7.2 GB)
-- MS Visual Studio - build tools only else many more GB. Reboots necessary, [read the notes](https://chocolatey.org/packages/visualstudio2017buildtools) (2.5 GB)
-- Windows SDK
-- Inno Setup v6
+    winget install Microsoft.VisualStudio.2022.BuildTools
+    winget install Rustlang.Rustup
+    winget install JRSoftware.InnoSetup
+    winget install Git.Git
 
 [Chocolatey](https://chocolatey.org/) installation:
 
-    choco install qtcreator, windows-sdk-10.-0, innosetup
-    choco install visualstudio2017buildtools
-    choco install visualstudio2017-workload-vctools ^
-      --params "--add Microsoft.VisualStudio.Component.VC.Runtimes.x86.x64.Spectre"
+    choco install visualstudio2022buildtools
+    choco install visualstudio2022-workload-vctools
+    choco install rustup.install innosetup git
+
+With either package manager, make sure the Visual Studio install includes the
+*Desktop development with C++* workload and the *C++ CMake tools* component
+(add them from the Visual Studio Installer if needed).
 
 **Quick start** after developer env is set:
 
-    git clone https://github.com/tibold/svg-explorer-extension.git
-    cd svg-explorer-extension\deployment
-    .\build.cmd
+    git clone https://github.com/SickSartori/svg-preview.git
+    cd svg-preview
+    pwsh .\deployment\Build.ps1 -Verbose -Architecture x64
+
+The build script clones and compiles resvg at a pinned release, builds the
+DLL with CMake and packages the installer.
+
+To validate thumbnails without registering the extension, the build also produces
+`ThumbnailTestHarness.exe`, which drives the DLL exactly like Explorer does:
+
+    ThumbnailTestHarness.exe SvgPreview.dll input.svg output.png 256
 
 ## History
 Tibold Kandrai started the project in 2012, first on Google Code, Codeplex. Life happened and Tibold didn't have time to work on it any more, though the extension continued to work more than it didn't so people kept using it. 
@@ -84,10 +114,13 @@ In late 2019 a lucky confluence of stubborn brute force learning on Matt's part 
 
 On 1st of January, 2020 version v1.0.0 was released including all bug fixes and up to date dependencies. Let's see where the rest of the year takes us. :-)
 
+In 2026 this fork, SVG Preview, replaced the QtSvg engine with resvg after tracking down why SVGs with clip paths had been rendering wrong for years. Everything else - the shell extension design, the installer, the project itself - stands on the shoulders of Tibold's work and that of all the contributors above.
+
 ## Contributors ✨
 
 Thank you's for helping make this a better project _([emoji key](https://allcontributors.org/docs/en/emoji-key))_:
 
+* [resvg](https://github.com/linebender/resvg) - SVG rendering engine
 * [Qt](https://www.qt.io/) - dev platform and libraries
 * [Jeremy@urk](https://www.codemonkeycodes.com/2010/01/11/ithumbnailprovider-re-visited/) - initial example
 * [Tibold Kandrai](https://github.com/tibold) - Project creator and primary developer

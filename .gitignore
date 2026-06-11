@@ -3,3 +3,6 @@
 *.pro.user.*
 build-*
 var
+# resvg build products are vendored by deployment/Build.ps1, not committed
+SVGThumbnailExtension/thirdparty/resvg/lib/
+ruvector.db

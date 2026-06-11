@@ -2,14 +2,14 @@
 
 #include "Common.h"
 
+#include <resvg.h>
 
 class CThumbnailProvider : public IThumbnailProvider, IObjectWithSite, IInitializeWithStream
 {
 private:
     LONG m_cRef;
     IUnknown* m_pSite;
-    QSvgRenderer renderer;
-    bool loaded;
+    resvg_render_tree* m_tree;
 
     ~CThumbnailProvider();
 
