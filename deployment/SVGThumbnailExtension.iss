@@ -50,8 +50,8 @@ Name: "en"; MessagesFile: "compiler:Default.isl"; LicenseFile: "..\LICENSE.md"
 Source: "..\var\dist\{#arch}\release\*"; DestDir: "{app}"; Flags: recursesubdirs                   
 Source: "..\var\dist\{#arch}\release\SvgSee.dll"; DestDir: "{app}"; Flags: regserver           
 ; Licenses
-; FIXME: the qt license should not be stored in this repository but be copied from the qt distribution
-Source: "..\var\licenses\Qt.txt"; DestDir: "{app}\license\";
+Source: "..\var\licenses\resvg-MIT.txt"; DestDir: "{app}\license\";
+Source: "..\var\licenses\resvg-APACHE.txt"; DestDir: "{app}\license\";
 Source: "..\LICENSE.md"; DestDir: "{app}\license\";
 
 [Code]
