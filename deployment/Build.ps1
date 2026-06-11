@@ -1,7 +1,7 @@
 [CmdletBinding()]
 Param(
     [Parameter()]
-    [string] $ProjectName = 'SVGThumbnailExtension',
+    [string] $ProjectName = 'SvgPreview',
 
     [Parameter()]
     [ValidateSet('release', 'debug')]
@@ -157,7 +157,7 @@ function Build-Application {
     & $script:cmake --build $buildDir --config $cmakeConfig
     Assert-LastExitCode 'Failed to build the project'
 
-    Copy-Item (Join-Path $buildDir "$cmakeConfig/SvgSee.dll") $distDir -Force
+    Copy-Item (Join-Path $buildDir "$cmakeConfig/SvgPreview.dll") $distDir -Force
 }
 
 function Publish-Application {

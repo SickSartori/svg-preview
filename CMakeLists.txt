@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(SvgSee LANGUAGES CXX)
+project(SvgPreview LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,7 +22,7 @@ if(NOT EXISTS ${RESVG_LIB})
 endif()
 
 # The shell extension DLL
-add_library(SvgSee SHARED
+add_library(SvgPreview SHARED
     SVGThumbnailExtension/ClassFactory.cpp
     SVGThumbnailExtension/Main.cpp
     SVGThumbnailExtension/Registry.cpp
@@ -30,17 +30,17 @@ add_library(SvgSee SHARED
     SVGThumbnailExtension/ThumbnailProvider.def
 )
 
-target_include_directories(SvgSee PRIVATE ${RESVG_DIR}/include)
+target_include_directories(SvgPreview PRIVATE ${RESVG_DIR}/include)
 
 # System libraries: the first row is used by the extension itself,
 # the second row is required by the static resvg (Rust) runtime.
-target_link_libraries(SvgSee PRIVATE
+target_link_libraries(SvgPreview PRIVATE
     ${RESVG_LIB}
     shlwapi advapi32
     ntdll userenv ws2_32 dbghelp
 )
 
-target_compile_definitions(SvgSee PRIVATE
+target_compile_definitions(SvgPreview PRIVATE
     UNICODE _UNICODE
     $<$<CONFIG:Release>:NDEBUG>
 )

@@ -1,11 +1,11 @@
-// Offline test harness for the SvgSee thumbnail provider.
+// Offline test harness for the SvgPreview thumbnail provider.
 //
 // Loads the shell extension DLL the same way Explorer does -- via
 // DllGetClassObject -> IClassFactory -> IInitializeWithStream ->
 // IThumbnailProvider -- and saves the produced HBITMAP as a PNG so the
 // output can be inspected without registering the extension.
 //
-// Usage: ThumbnailTestHarness <SvgSee.dll> <input.svg> <output.png> [size]
+// Usage: ThumbnailTestHarness <SvgPreview.dll> <input.svg> <output.png> [size]
 
 #include <windows.h>
 #include <shlwapi.h>
@@ -17,8 +17,8 @@
 #include <cwchar>
 
 // Must match szCLSID_SampleThumbnailProvider in Common.h
-static const CLSID CLSID_SvgSeeThumbnailProvider =
-    {0x4ca20d9a, 0x98ac, 0x4dd6, {0x9c, 0x16, 0x74, 0x49, 0xf2, 0x9a, 0xc0, 0x8a}};
+static const CLSID CLSID_SvgPreviewThumbnailProvider =
+    {0x927c8f59, 0xc5ea, 0x488c, {0x99, 0x5e, 0xa6, 0x1a, 0xf4, 0x02, 0xdf, 0x7d}};
 
 typedef HRESULT (STDAPICALLTYPE *DllGetClassObjectFunc)(REFCLSID, REFIID, void**);
 
@@ -58,7 +58,7 @@ int wmain(int argc, wchar_t** argv)
 {
     if (argc < 4)
     {
-        fwprintf(stderr, L"Usage: %s <SvgSee.dll> <input.svg> <output.png> [size]\n", argv[0]);
+        fwprintf(stderr, L"Usage: %s <SvgPreview.dll> <input.svg> <output.png> [size]\n", argv[0]);
         return 2;
     }
 
@@ -91,7 +91,7 @@ int wmain(int argc, wchar_t** argv)
     }
 
     IClassFactory* factory = NULL;
-    hr = getClassObject(CLSID_SvgSeeThumbnailProvider, IID_PPV_ARGS(&factory));
+    hr = getClassObject(CLSID_SvgPreviewThumbnailProvider, IID_PPV_ARGS(&factory));
     if (FAILED(hr))
         return Fail(L"DllGetClassObject", hr);
 

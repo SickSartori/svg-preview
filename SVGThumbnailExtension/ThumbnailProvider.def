@@ -1,4 +1,4 @@
-LIBRARY	"SvgSee"
+LIBRARY	"SvgPreview"
 
 EXPORTS
 	DllRegisterServer	PRIVATE
