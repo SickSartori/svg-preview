@@ -1,34 +1,47 @@
 #include "Common.h"
 #include "ThumbnailProvider.h"
+#include "Logging.h"
 
-#include <gdiplus.h>
-#include <assert.h>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <mutex>
+#include <vector>
 
-#include <QtCore/QDateTime>
-#ifndef NDEBUG
-#include <QtCore/QString>
-#include <QtCore/QDir>
-#include <QtCore/QFile>
-#endif
-#include <QtGui/QImage>
-#include <QtGui/QPainter>
-#include <QtGui/QPixmap>
-#if QT_VERSION >= 0x050200
-#include <QtWin>
-#endif
+namespace {
 
-using namespace Gdiplus;
+// Shared, lazily created resvg options. Loading the system font database is
+// expensive, so it is done once per process and reused by every instance.
+// resvg_parse_tree_from_data only borrows the options (const), so sharing a
+// single instance across apartment threads is safe.
+const resvg_options* sharedOptions()
+{
+    static resvg_options* options = nullptr;
+    static std::once_flag once;
+    std::call_once(once, []() {
+        options = resvg_options_create();
+        resvg_options_load_system_fonts(options);
+    });
+    return options;
+}
+
+} // namespace
 
 CThumbnailProvider::CThumbnailProvider()
 {
     DllAddRef();
     m_cRef = 1;
     m_pSite = NULL;
-    loaded = false;
+    m_tree = NULL;
 }
 
 CThumbnailProvider::~CThumbnailProvider()
 {
+    if (m_tree)
+    {
+        resvg_tree_destroy(m_tree);
+        m_tree = NULL;
+    }
     if (m_pSite)
     {
         m_pSite->Release();
@@ -98,30 +111,60 @@ STDMETHODIMP_(ULONG) CThumbnailProvider::Release()
  * ============================
  */
 
-STDMETHODIMP CThumbnailProvider::Initialize(IStream *pstm, 
+STDMETHODIMP CThumbnailProvider::Initialize(IStream *pstm,
                                             DWORD grfMode)
 {
-    ULONG len;
     STATSTG stat;
-    Q_UNUSED(grfMode)
+    UNREFERENCED_PARAMETER(grfMode);
 
-    if(loaded) {
+    if(m_tree) {
         return HRESULT_FROM_WIN32(ERROR_ALREADY_INITIALIZED);
     }
 
-    if(pstm->Stat(&stat, STATFLAG_DEFAULT) != S_OK){
-        return S_FALSE;
+    // STATFLAG_NONAME: the name is not needed and would have to be freed.
+    if(pstm->Stat(&stat, STATFLAG_NONAME) != S_OK){
+        return E_FAIL;
     }
 
-    char * data = new char[stat.cbSize.QuadPart];
-
-    if(pstm->Read(data, stat.cbSize.QuadPart, &len) != S_OK){
-        return S_FALSE;
+    // Reject empty streams and refuse absurdly large files instead of
+    // attempting an allocation of that size.
+    const ULONGLONG maxSvgSize = 256ull * 1024 * 1024;
+    if(stat.cbSize.QuadPart == 0 || stat.cbSize.QuadPart > maxSvgSize){
+        return E_FAIL;
     }
 
-    QByteArray bytes = QByteArray(data, stat.cbSize.QuadPart);
+    std::vector<char> bytes(static_cast<size_t>(stat.cbSize.QuadPart));
 
-    loaded = renderer.load(bytes);
+    // IStream::Read may return less than requested; keep reading until the
+    // whole stream is consumed.
+    ULONG total = 0;
+    while(total < bytes.size()){
+        ULONG read = 0;
+        HRESULT hr = pstm->Read(bytes.data() + total,
+                                static_cast<ULONG>(bytes.size()) - total,
+                                &read);
+        if(FAILED(hr) || read == 0){
+            break;
+        }
+        total += read;
+        if(hr == S_FALSE){
+            break;
+        }
+    }
+    if(total != bytes.size()){
+        return E_FAIL;
+    }
+
+    // resvg handles both plain SVG and gzip compressed SVGZ data.
+    int32_t err = resvg_parse_tree_from_data(bytes.data(),
+                                             bytes.size(),
+                                             sharedOptions(),
+                                             &m_tree);
+    if(err != RESVG_OK){
+        debugLog << "Failed to parse SVG data, resvg error " << err;
+        m_tree = NULL;
+        return E_FAIL;
+    }
 
     return S_OK;
 }
@@ -138,80 +181,68 @@ STDMETHODIMP CThumbnailProvider::Initialize(IStream *pstm,
  * ============================
  */
 
-STDMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx, 
+STDMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx,
                                               HBITMAP *phbmp,
                                               WTS_ALPHATYPE *pdwAlpha)
 {
     *phbmp = NULL;
     *pdwAlpha = WTSAT_ARGB;
 
-#ifdef NDEBUG
-    if(!loaded) {
+    if(!m_tree){
         return S_FALSE;
     }
-#endif
 
     // Fit the render into a (cx * cx) square while maintaining the aspect ratio.
-    QSize size = renderer.defaultSize();
-    size.scale(cx, cx, Qt::AspectRatioMode::KeepAspectRatio);
-
-#ifndef NDEBUG
-    QDir debugDir("C:\\dev");
-    if(debugDir.exists()) {
-        QFile f("C:\\dev\\svg.log");
-        f.open(QFile::Append);
-        //    f->write(QString("Size: %1 \n.").arg(cx).toAscii());
-        f.write(QString("Size: %1 \n").arg(cx).toUtf8());
-        f.flush();
-        f.close();
+    resvg_size docSize = resvg_get_image_size(m_tree);
+    if(!(docSize.width > 0.0f) || !(docSize.height > 0.0f)){
+        return S_FALSE;
     }
-#endif
 
-    QImage * device = new QImage(size, QImage::Format_ARGB32);
-    device->fill(Qt::transparent);
-    QPainter painter(device);
+    const double scale = (std::min)(cx / (double)docSize.width,
+                                    cx / (double)docSize.height);
+    const LONG width  = (std::max)(1l, std::lround(docSize.width * scale));
+    const LONG height = (std::max)(1l, std::lround(docSize.height * scale));
 
-    painter.setRenderHints(QPainter::Antialiasing |
-                           QPainter::SmoothPixmapTransform |
-                           QPainter::TextAntialiasing);
+    // Top-down 32bpp DIB; the thumbnail cache expects premultiplied BGRA.
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
 
-    assert(device->paintingActive() && painter.isActive());
-    if(loaded){
-        renderer.render(&painter);
-    } else {
-        QFont font;
-        QColor color_font = QColor(255, 0, 0);
-        int font_size = cx / 10;
-
-        font.setStyleHint(QFont::Monospace);
-        font.setPixelSize(font_size);
-
-        painter.setPen(color_font);
-        painter.setFont(font);
-        painter.drawText(font_size, (cx - font_size) / 2, "Invalid SVG file.");
+    void* bits = NULL;
+    HBITMAP bitmap = CreateDIBSection(NULL, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if(bitmap == NULL || bits == NULL){
+        if(bitmap){
+            DeleteObject(bitmap);
+        }
+        return E_OUTOFMEMORY;
     }
-    painter.end();
 
-    assert(!device->isNull());
-#ifndef NDEBUG
-    device->save(QString("C:\\dev\\%1.png").arg(QDateTime::currentMSecsSinceEpoch()), "PNG");
-#endif
+    const size_t byteCount = (size_t)width * (size_t)height * 4;
+    std::memset(bits, 0, byteCount);
 
-    // Issue #19, https://github.com/tibold/svg-explorer-extension/issues/19
-    // Old syntax: HBITMAP QPixmap::toWinHBITMAP(HBitmapFormat format = NoAlpha) const
-    // New syntax: HBITMAP QtWin::toHBITMAP(const QPixmap &p, QtWin::HBitmapFormat format = HBitmapNoAlpha)
-#if QT_VERSION < 0x050200
-    *phbmp = QPixmap::fromImage(*device).toWinHBITMAP(QPixmap::Alpha);
-#else
-    *phbmp = QtWin::toHBITMAP(QPixmap::fromImage(*device), QtWin::HBitmapAlpha);
-#endif
-    assert(*phbmp != NULL);
+    // resvg renders premultiplied RGBA8888; render straight into the DIB and
+    // swap R and B in place to obtain the premultiplied BGRA GDI expects.
+    resvg_transform transform = resvg_transform_identity();
+    transform.a = (float)scale;
+    transform.d = (float)scale;
+    resvg_render(m_tree, transform,
+                 (uint32_t)width, (uint32_t)height,
+                 static_cast<char*>(bits));
 
-    delete device;
+    unsigned char* px = static_cast<unsigned char*>(bits);
+    for(size_t i = 0; i < byteCount; i += 4){
+        unsigned char r = px[i];
+        px[i] = px[i + 2];
+        px[i + 2] = r;
+    }
 
-    if( *phbmp != NULL )
-        return S_OK;
-    return S_FALSE;
+    *phbmp = bitmap;
+    return S_OK;
 }
 
 /*
@@ -226,7 +257,7 @@ STDMETHODIMP CThumbnailProvider::GetThumbnail(UINT cx,
  * ============================
  */
 
-STDMETHODIMP CThumbnailProvider::GetSite(REFIID riid, 
+STDMETHODIMP CThumbnailProvider::GetSite(REFIID riid,
                                          void** ppvSite)
 {
     if (m_pSite)
