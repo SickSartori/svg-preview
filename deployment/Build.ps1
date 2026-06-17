@@ -152,7 +152,11 @@ function Build-Application {
 
     $cmakeConfig = $cmakeConfigMap[$Configuration]
 
-    & $script:cmake -S $rootFolder -B $buildDir -G 'Visual Studio 17 2022' -A $cmakeArchMap[$Architecture]
+    # Let CMake pick the newest installed Visual Studio generator rather than
+    # pinning a version: GitHub's windows-latest image ships whatever VS is
+    # current (VS2022 -> VS2026 as of mid-2026), and a hardcoded generator
+    # breaks on every image bump. -A still selects the target architecture.
+    & $script:cmake -S $rootFolder -B $buildDir -A $cmakeArchMap[$Architecture]
     Assert-LastExitCode 'Failed to configure the project'
 
     & $script:cmake --build $buildDir --config $cmakeConfig
