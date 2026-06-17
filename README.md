@@ -25,6 +25,10 @@ From _[Releases](https://github.com/SickSartori/svg-preview/releases)_ download 
 
 Installing SVG Preview automatically removes previous versions, including the original SVG See if present.
 
+### Code signing
+
+Release installers are Authenticode-signed. Free code signing is provided by [SignPath.io](https://signpath.io), with a certificate issued by the [SignPath Foundation](https://signpath.org). See [deployment/SIGNING.md](deployment/SIGNING.md) for details.
+
 ## Troubleshooting
 
 ----
