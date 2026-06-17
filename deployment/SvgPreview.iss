@@ -12,8 +12,8 @@
 AppId={{0C3C0E1A-DDC9-4E6F-9F0B-66FCC9C0437C}
 AppMutex=github_sicksartori_svg_preview
 AppName="SVG Preview"
-AppVersion="2.0.0"
-AppVerName="SVG Preview 2.0.0"
+AppVersion="2.0.1"
+AppVerName="SVG Preview 2.0.1"
 AppPublisher="Gabriel Sartori"
 AppPublisherURL=https://github.com/SickSartori/svg-preview
 AppSupportURL=https://github.com/SickSartori/svg-preview/issues
