@@ -18,11 +18,14 @@ Param(
     [Parameter()]
     [string] $ResvgRepository = 'https://github.com/linebender/resvg.git',
 
+    # Which part of the build to run.
+    #   All       - resvg + DLL + installer (local one-shot build)
+    #   Dll       - resvg + DLL only (CI stops here to sign the DLL)
+    #   Installer - vc_redist + licenses + installer, assuming the (signed)
+    #               DLL is already present in the dist folder
     [Parameter()]
-    [switch] $BuildInstaller = [switch]::Present,
-
-    [Parameter()]
-    [switch] $SignInstaller,
+    [ValidateSet('All', 'Dll', 'Installer')]
+    [string] $Stage = 'All',
 
     [Parameter()]
     [string] $InnoSetupPath = 'C:\Program Files (x86)\Inno Setup 6'
@@ -40,7 +43,7 @@ $resvgSrcDir = Join-Path $rootFolder 'var/resvg'
 $resvgVendorDir = Join-Path $rootFolder 'SVGThumbnailExtension/thirdparty/resvg'
 $licenseDir = Join-Path $rootFolder 'var/licenses'
 $installerDir = Join-Path $rootFolder 'var/installer'
-$installerPath = Join-Path $installerDir "svg_see_$Architecture.exe"
+$installerPath = Join-Path $installerDir "svg_preview_$Architecture.exe"
 
 $cmakeArchMap = @{
     'x86' = 'Win32';
@@ -81,7 +84,7 @@ function Find-CMake {
 
 function Initialize-Environment {
 
-    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    if ($Stage -ne 'Installer' -and -not (Get-Command cargo -ErrorAction SilentlyContinue)) {
         $cargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
         if (Test-Path (Join-Path $cargoBin 'cargo.exe')) {
             $env:Path = "$cargoBin;$env:Path"
@@ -91,16 +94,14 @@ function Initialize-Environment {
         }
     }
 
-    $script:cmake = Find-CMake
-    Write-Verbose "Using CMake at: $script:cmake"
+    if ($Stage -ne 'Installer') {
+        $script:cmake = Find-CMake
+        Write-Verbose "Using CMake at: $script:cmake"
+    }
 
-    if ($BuildInstaller) {
+    if ($Stage -ne 'Dll') {
         # Setup "Inno Setup" build environment
         Use-InnoSetup -InstallPath $InnoSetupPath
-
-        if ($SignInstaller) {
-            Use-OpenGPG
-        }
     }
 }
 
@@ -192,28 +193,16 @@ function Build-Installer {
     }
 }
 
-function Protect-Installer {
-
-    Write-Verbose 'Signing installer'
-
-    # Sign the installer
-    gpg --detach-sign --armor --yes -o "$installerPath.sig" "$installerPath" | Write-Verbose
-    Assert-LastExitCode 'Failed to sign installer.'
-
-    # Verify the signature
-    gpg --verify "$installerPath.sig" "$installerPath" | Write-Verbose
-    Assert-LastExitCode 'Failed to verify signed installer.'
-
-    Write-Verbose 'Installer signed successfully'
-}
-
 Initialize-Environment
-Build-Resvg
-Build-Application
-Publish-Application
-if ($BuildInstaller) {
+
+# Authenticode signing is performed by the CI between these stages
+# (the DLL is signed before it is packaged, the installer after it is built),
+# which is why the build can be run one stage at a time.
+if ($Stage -ne 'Installer') {
+    Build-Resvg
+    Build-Application
+}
+if ($Stage -ne 'Dll') {
+    Publish-Application
     Build-Installer
-    if ($SignInstaller) {
-        Protect-Installer
-    }
 }

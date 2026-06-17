@@ -1,0 +1,79 @@
+name: release
+
+# Builds, code-signs (via SignPath) and publishes the installer when a
+# GitHub release is published. Inert until signing is configured: set the
+# repository variable SIGNING_ENABLED to "true" and provide the SignPath
+# secret/variables described in deployment/SIGNING.md.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # upload the signed installer to the release
+  id-token: write   # SignPath OIDC verification of the build
+
+jobs:
+  build-sign-release:
+    if: ${{ vars.SIGNING_ENABLED == 'true' }}
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # windows-latest ships VS2022, Rust (rustup) and Inno Setup 6.
+      - name: Build DLL (unsigned)
+        shell: pwsh
+        run: .\deployment\Build.ps1 -Verbose -Architecture x64 -Stage Dll
+
+      - name: Upload unsigned DLL
+        id: dll-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: SvgPreview-dll-unsigned
+          path: var/dist/x64/release/SvgPreview.dll
+
+      - name: Sign the DLL
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: svg-preview
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: dll
+          github-artifact-id: ${{ steps.dll-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          # Drop the signed DLL back where the installer build expects it.
+          output-artifact-directory: var/dist/x64/release
+
+      - name: Build installer with the signed DLL
+        shell: pwsh
+        run: .\deployment\Build.ps1 -Verbose -Architecture x64 -Stage Installer
+
+      - name: Upload unsigned installer
+        id: installer-unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: svg_preview-installer-unsigned
+          path: var/installer/svg_preview_x64.exe
+
+      - name: Sign the installer
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: svg-preview
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.installer-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: var/installer-signed
+
+      - name: Attach the signed installer to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" `
+            var/installer-signed/svg_preview_x64.exe --clobber
