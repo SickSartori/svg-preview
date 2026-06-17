@@ -1,9 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(SvgPreview LANGUAGES CXX)
+project(SvgPreview VERSION 2.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Metadata embedded into the DLL's Win32 version resource
+# (shown in Explorer > Properties > Details).
+set(SVGPREVIEW_PRODUCT     "SVG Preview")
+set(SVGPREVIEW_DESCRIPTION "SVG thumbnail provider for Windows Explorer")
+set(SVGPREVIEW_COMPANY     "Gabriel Sartori")
+set(SVGPREVIEW_COPYRIGHT   "Copyright (C) 2026 Gabriel Sartori. LGPL-3.0. Based on SVG Explorer Extension by Tibold Kandrai.")
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/SVGThumbnailExtension/VersionInfo.rc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/VersionInfo.rc
+    @ONLY)
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(RESVG_ARCH x86)
@@ -28,6 +39,7 @@ add_library(SvgPreview SHARED
     SVGThumbnailExtension/Registry.cpp
     SVGThumbnailExtension/ThumbnailProvider.cpp
     SVGThumbnailExtension/ThumbnailProvider.def
+    ${CMAKE_CURRENT_BINARY_DIR}/VersionInfo.rc
 )
 
 target_include_directories(SvgPreview PRIVATE ${RESVG_DIR}/include)
