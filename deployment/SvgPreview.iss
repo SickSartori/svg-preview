@@ -21,6 +21,8 @@ AppUpdatesURL=https://github.com/SickSartori/svg-preview/releases
 DefaultGroupName="SvgPreview"
 OutputDir=..\var\installer
 OutputBaseFilename="svg_preview_{#arch}"
+SetupIconFile=assets\SvgPreview.ico
+UninstallDisplayIcon={app}\SvgPreview.ico
 Compression=lzma
 SolidCompression=yes
 ChangesAssociations=yes
@@ -52,6 +54,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"; LicenseFile: "..\LICENSE.md"
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 Source: "..\var\dist\{#arch}\release\*"; DestDir: "{app}"; Flags: recursesubdirs
 Source: "..\var\dist\{#arch}\release\SvgPreview.dll"; DestDir: "{app}"; Flags: regserver
+Source: "assets\SvgPreview.ico"; DestDir: "{app}";
 ; Licenses
 Source: "..\var\licenses\resvg-MIT.txt"; DestDir: "{app}\license\";
 Source: "..\var\licenses\resvg-APACHE.txt"; DestDir: "{app}\license\";

@@ -1,6 +1,12 @@
-# SVG Preview for Windows Explorer
+<p align="center">
+  <img src="docs/logo.png" alt="SVG Preview" width="128" height="128">
+</p>
 
-[![build](https://github.com/SickSartori/svg-preview/actions/workflows/build.yml/badge.svg)](https://github.com/SickSartori/svg-preview/actions/workflows/build.yml)
+<h1 align="center">SVG Preview for Windows Explorer</h1>
+
+<p align="center">
+  <a href="https://github.com/SickSartori/svg-preview/actions/workflows/build.yml"><img src="https://github.com/SickSartori/svg-preview/actions/workflows/build.yml/badge.svg" alt="build"></a>
+</p>
 
 SVG thumbnails in Windows Explorer, rendered with [resvg](https://github.com/linebender/resvg) for accurate, browser-grade results.
 
