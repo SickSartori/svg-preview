@@ -19,7 +19,14 @@ This fork renders through resvg instead, statically linked into a single ~3 MB D
 The same clip path that QtSvg ignores (left, the image fills the whole square) is applied correctly by resvg (right). Masks, filters, `<use>` forward references, embedded raster images and gzipped `.svgz` all work too.
 
 ## Installation
-From _[Releases](https://github.com/SickSartori/svg-preview/releases)_ download and run appropriate binary for your system. There are no further actions required after installations.
+
+### winget (recommended)
+
+    winget install SickSartori.SvgPreview
+
+### Manual
+
+From _[Releases](https://github.com/SickSartori/svg-preview/releases)_ download and run the appropriate binary for your system. There are no further actions required after installation.
 
 > Make sure you download the right architecture (the 32 bit installer will run on a 64 bit system, but the extension will not function).
 
