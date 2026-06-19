@@ -1,9 +1,28 @@
 # Code signing
 
-Release installers are Authenticode-signed through [SignPath](https://signpath.org),
-which is free for open-source projects. Signing removes the SmartScreen /
-Microsoft Defender "unknown publisher" warnings and the `Wacatac.*!ml`
-false-positive that unsigned installers trigger.
+> **Status: not yet signed.** Releases are currently unsigned. The
+> SignPath Foundation OSS program declined the application because the
+> project does not yet have enough public reputation (stars, forks,
+> external references). We will reapply once it has grown. The
+> `release.yml` workflow below is ready and stays inert until a signing
+> backend is wired up.
+>
+> Note: unsigned releases still install fine. The Microsoft Defender
+> `Wacatac.*!ml` false positive that unsigned installers used to trigger
+> has already been cleared by Microsoft via a false-positive report, so
+> the only remaining effect of being unsigned is the SmartScreen
+> "unknown publisher" prompt on first run.
+>
+> Alternative signing backends if/when needed:
+> - **SignPath Foundation** (free, OSS) - reapply once the project has
+>   established reputation. This is the preferred path.
+> - **Azure Trusted Signing** (~$10/month) - works immediately but
+>   requires identity validation; swap the SignPath steps in
+>   `release.yml` for the `azure/trusted-signing-action`.
+
+The workflow is built around [SignPath](https://signpath.org), which is free
+for open-source projects. Signing removes the SmartScreen "unknown publisher"
+warning.
 
 Signing runs in [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 when a GitHub release is published. The DLL is signed first, packaged into the
